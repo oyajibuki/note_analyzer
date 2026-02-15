@@ -1,12 +1,22 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import requests
+from curl_cffi import requests as cffi_requests
 import urllib.parse
-import time
-from datetime import datetime, timedelta
-import csv
-import io
+import random
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 app = Flask(__name__)
+
+# JSONデータから記事情報を根こそぎ見つける関数
+def find_notes_in_json(obj, found_notes, seen_keys):
+    # ... (omitting unchanged parts for brevity, but tool requires full context or just changes)
+    # Since I am replacing the top part, I will just provide the top part.
+    # Wait, the tool requires me to match TargetContent exactly.
+    # I will replace the imports and the get_note_ranking function's request call.
+    pass
+
+# Let's do it in chunks or simpler replace
+
 
 # JSONデータから記事情報を根こそぎ見つける関数
 def find_notes_in_json(obj, found_notes, seen_keys):
@@ -69,6 +79,15 @@ def get_note_ranking(keyword, duration="all"):
     
     print(f"Searching for {keyword} with duration {duration}...")
 
+    # tenacityでリトライ処理 (最大3回、指数バックオフ)
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), retry=retry_if_exception_type(Exception))
+    def fetch_page(url):
+        # ランダムな待機時間を入れる
+        time.sleep(random.uniform(1, 3))
+        response = cffi_requests.get(url, impersonate="chrome")
+        response.raise_for_status()
+        return response.json()
+
     for page in range(max_pages):
         start = page * 50
         # sort=like でスキ数順
@@ -76,11 +95,8 @@ def get_note_ranking(keyword, duration="all"):
         
         try:
             print(f"Fetching page {page+1}...")
-            time.sleep(1) # サーバーへの配慮
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
             
-            json_data = response.json()
+            json_data = fetch_page(url)
             
             initial_count = len(results)
             find_notes_in_json(json_data, results, seen_keys)

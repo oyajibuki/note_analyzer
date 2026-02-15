@@ -49,3 +49,27 @@ Click the URL provided by Render. Your Note Analyzer is now on the web!
 
 -   **502 Bad Gateway**: Check the "Logs" tab in Render. It usually means the app failed to start. Ensure `Procfile` exists and contains `web: gunicorn app:app`.
 -   **No Results**: Note.com might be blocking requests from Render's IP addresses. If this happens, the tool might only work locally on your PC.
+
+## How to Update the App
+
+To update your live website with the latest code:
+
+1.  Make changes to your code locally.
+2.  Open your terminal and run:
+    ```bash
+    git add .
+    git commit -m "Update application"
+    git push
+    ```
+3.  Render will automatically detect the changes and start a new deployment (this takes a few minutes).
+
+## How to Stop or Delete the App
+
+If you want to stop the app (to save resources or take it offline):
+
+1.  Go to your **Render Dashboard**.
+2.  Click on your **Web Service** (e.g., `my-note-analyzer`).
+3.  Click the **"Settings"** tab.
+4.  Scroll to the bottom:
+    -   **Suspend Service**: Temporarily stops the app. You can resume it later.
+    -   **Delete Service**: Permanently removes the app and all settings.
