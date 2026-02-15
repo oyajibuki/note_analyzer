@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>note ハッシュタグ ランキング分析</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f9f9f9;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #2cb696;
+            /* noteのブランドカラー風 */
+            text-align: center;
+        }
+
+        .search-box {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+
+        input[type="text"] {
+            padding: 10px;
+            width: 300px;
+            border: 1px solid #ccc;
+            border-radius: 4px 0 0 4px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #2cb696;
+            color: white;
+            border: none;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #259c80;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+
+        .rank {
+            font-weight: bold;
+            color: #e74c3c;
+            text-align: center;
+        }
+
+        .likes {
+            font-weight: bold;
+            color: #e67e22;
+        }
+
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        #loading {
+            text-align: center;
+            display: none;
+            color: #666;
+        }
+    </style>
+    <style>
+        .download-btn {
+            padding: 10px 20px;
+            background-color: #e67e22;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .download-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>note 売れ筋・人気記事分析ツール</h1>
+
+    <div class="search-box">
+        <input type="text" id="hashtagInput" placeholder="例: 読書, 副業, Python">
+        <button onclick="searchHashtag()">検索</button>
+        <button id="csvBtn" class="download-btn" onclick="downloadCSV()" disabled>CSVダウンロード</button>
+    </div>
+
+    <div style="text-align: center; margin-bottom: 20px;">
+        <label><input type="radio" name="duration" value="24h"> 本日(24時間)</label>
+        <label><input type="radio" name="duration" value="week"> 週間(7日間)</label>
+        <label><input type="radio" name="duration" value="month"> 月間</label>
+        <label><input type="radio" name="duration" value="year"> 年間</label>
+        <label><input type="radio" name="duration" value="all" checked> 全期間</label>
+    </div>
+
+    <div id="loading">データを取得中...（数秒〜数十秒かかります）</div>
+
+    <table id="resultsTable" style="display: none;">
+        <thead>
+            <tr>
+                <th>順位</th>
+                <th>スキ数</th>
+                <th>記事タイトル</th>
+                <th>クリエイター</th>
+                <th>価格(円)</th>
+                <th>公開日時</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+        </tbody>
+    </table>
+
+    <!-- CSVダウンロード用の隠しフォーム -->
+    <form id="csvForm" action="/api/download_csv" method="POST" target="_blank" style="display:none;">
+        <input type="hidden" name="hashtag" id="csvHashtag">
+        <input type="hidden" name="duration" id="csvDuration">
+    </form>
+
+    <script>
+        async function searchHashtag() {
+            const hashtag = document.getElementById('hashtagInput').value;
+            const loading = document.getElementById('loading');
+            const table = document.getElementById('resultsTable');
+            const tbody = document.getElementById('tableBody');
+            const csvBtn = document.getElementById('csvBtn');
+
+            // 選択された期間を取得
+            const durationElements = document.getElementsByName('duration');
+            let duration = 'all';
+            for (const element of durationElements) {
+                if (element.checked) {
+                    duration = element.value;
+                    break;
+                }
+            }
+
+            if (!hashtag) {
+                alert('ハッシュタグを入力してください');
+                return;
+            }
+
+            // UIの初期化
+            tbody.innerHTML = '';
+            table.style.display = 'none';
+            loading.style.display = 'block';
+            csvBtn.disabled = true;
+
+            try {
+                // FlaskのAPIにデータを送信
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hashtag: hashtag, duration: duration })
+                });
+
+                const data = await response.json();
+
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach((item, index) => {
+                        const tr = document.createElement('tr');
+                        // 価格が0の場合は「無料」と表示
+                        const priceDisplay = item.price === 0 ? "無料" : `¥${item.price}`;
+
+                        // 日付のフォーマット (簡易)
+                        let dateDisplay = item.publish_at;
+                        if (item.publish_at) {
+                            try {
+                                const date = new Date(item.publish_at);
+                                dateDisplay = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                            } catch (e) {
+                                // パースエラー時はそのまま
+                            }
+                        }
+
+                        tr.innerHTML = `
+                            <td class="rank">${index + 1}</td>
+                            <td class="likes">♥ ${item.likes}</td>
+                            <td><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title}</a></td>
+                            <td>${item.author}</td>
+                            <td>${priceDisplay}</td>
+                            <td style="font-size: 0.8em; color: #666;">${dateDisplay}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                    table.style.display = 'table';
+                    csvBtn.disabled = false;
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">指定された期間の記事が見つかりませんでした。</td></tr>';
+                    table.style.display = 'table';
+                }
+            } catch (error) {
+                alert('エラーが発生しました。');
+                console.error(error);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function downloadCSV() {
+            const hashtag = document.getElementById('hashtagInput').value;
+            const durationElements = document.getElementsByName('duration');
+            let duration = 'all';
+            for (const element of durationElements) {
+                if (element.checked) {
+                    duration = element.value;
+                    break;
+                }
+            }
+
+            document.getElementById('csvHashtag').value = hashtag;
+            document.getElementById('csvDuration').value = duration;
+            document.getElementById('csvForm').submit();
+        }
+    </script>
+</body>
+
+</html>
